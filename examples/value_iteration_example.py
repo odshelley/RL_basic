@@ -19,10 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 import numpy as np
 import matplotlib.pyplot as plt
 
-from gridworld.environment import StochasticGridworld, Action
-from algorithms.value_iteration import ValueIteration
-from algorithms.policy_iteration import PolicyIteration
-from utils.visualization import plot_gridworld, plot_value_function, plot_policy, plot_learning_curve
+from src.gridworld.environment import StochasticGridworld, Action
+from src.algorithms.value_iteration import ValueIteration
+from src.algorithms.policy_iteration import PolicyIteration
+from src.utils.visualization import plot_gridworld, plot_value_function, plot_policy, plot_learning_curve
 
 
 def main():
