@@ -30,19 +30,17 @@ class BehavioralConfig:
     """Configuration for behavioral aspects"""
     mode: str = "cpt"  # "none", "choquet", "cpt"
     
-    # Probability weighting
-    g_type: str = "prelec"  # "identity", "prelec", "wang"
-    g_params: Dict[str, Any] = field(default_factory=lambda: {"alpha": 0.65, "eta": 1.0})
+    # Probability weighting - very conservative
+    g_type: str = "prelec"  # "identity", "prelec", "wang" 
+    g_params: Dict[str, Any] = field(default_factory=lambda: {"alpha": 0.95, "eta": 1.0})  # Nearly identity    # CPT parameters - very conservative for stability  
+    lambda_loss_aversion: float = 1.05  # Minimal loss aversion
+    u_plus: Dict[str, Any] = field(default_factory=lambda: {"type": "power", "alpha": 0.99, "eps": 1e-6})  # Nearly linear
+    u_minus: Dict[str, Any] = field(default_factory=lambda: {"type": "power", "alpha": 0.99, "eps": 1e-6})  # Nearly linear
     
-    # CPT parameters
-    lambda_loss_aversion: float = 2.0
-    u_plus: Dict[str, Any] = field(default_factory=lambda: {"type": "power", "alpha": 0.88, "eps": 1e-6})
-    u_minus: Dict[str, Any] = field(default_factory=lambda: {"type": "power", "alpha": 0.88, "eps": 1e-6})
-    
-    # Reference point
+    # Reference point - conservative for Pendulum  
     reference: Dict[str, Any] = field(default_factory=lambda: {
-        "type": "constant",
-        "constant": 0.0,
+        "type": "constant", 
+        "constant": -1000.0,  # Conservative reference
         "ema_tau": 0.01
     })
     
@@ -55,8 +53,8 @@ class BehavioralConfig:
         "mixture": {"gammas": [0.99, 0.95, 0.90], "probs": [0.6, 0.3, 0.1]}
     })
     
-    # Action sampling for critic targets
-    n_action_samples: int = 8
+    # Minimal action sampling to reduce noise
+    n_action_samples: int = 2  # Minimal sampling for less noise
 
 
 @dataclass
@@ -69,9 +67,9 @@ class Args:
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
-    track: bool = False
+    track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "CPT_SAC"
+    wandb_project_name: str = "cpt-sac"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -81,9 +79,43 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "Pendulum-v1"
     """the environment id of the task"""
-    total_timesteps: int = 100000
+    total_timesteps: int = 200000
     """total timesteps of the experiments"""
     num_envs: int = 4
+    """the number of parallel game environments"""
+    buffer_size: int = int(1e6)
+    """the replay memory buffer size"""
+    gamma: float = 0.99
+    """the discount factor gamma"""
+    tau: float = 0.005
+    """target smoothing coefficient (default: 0.005)"""
+    batch_size: int = 256
+    """the batch size of sample from the reply memory"""
+    learning_starts: int = 5e3
+    """timestep to start learning"""
+    policy_lr: float = 3e-4
+    """the learning rate of the policy network optimizer"""
+    q_lr: float = 1e-3
+    """the learning rate of the Q network network optimizer"""
+    policy_frequency: int = 2
+    """the frequency of training policy (delayed)"""
+    target_network_frequency: int = 1
+    """the frequency of updates for the target nerworks"""
+    alpha: float = 0.2
+    """Entropy regularization coefficient."""
+    autotune: bool = True
+    """automatic tuning of the entropy coefficient"""
+    wandb_entity: str = None
+    """the entity (team) of wandb's project"""
+    capture_video: bool = False
+    """whether to capture videos of the agent performances (check out `videos` folder)"""
+
+    # Algorithm specific arguments
+    env_id: str = "Pendulum-v1"
+    """the environment id of the task"""
+    total_timesteps: int = 50000  # Reduced for quicker testing
+    """total timesteps of the experiments"""
+    num_envs: int = 8  # Increased for better parallelization
     """the number of parallel game environments"""
     buffer_size: int = int(1e6)
     """the replay memory buffer size"""
@@ -240,79 +272,86 @@ class CPTSACAgent:
         )
         
     def compute_behavioral_target(self, next_obs, rewards, dones, actor, qf1_target, qf2_target, alpha):
-        """Compute behavioral (CPT/Choquet) critic targets"""
+        """Compute behavioral critic targets - EXACTLY like standard SAC but with behavioral expectation"""
         cfg = self.behavioral_config
+        
+        if cfg.mode == "none":
+            # Pure standard SAC - exactly like behavioral_sac.py
+            with torch.no_grad():
+                next_state_actions, next_state_log_pi, _ = actor.get_action(next_obs)
+                qf1_next_target = qf1_target(next_obs, next_state_actions)
+                qf2_next_target = qf2_target(next_obs, next_state_actions)
+                min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - alpha * next_state_log_pi
+                next_q_value = rewards.flatten() + (1 - dones.flatten()) * 0.99 * min_qf_next_target.view(-1)
+            return next_q_value
+        
+        # For behavioral modes: use proper Choquet/CPT expectation
+        # but keep the same target structure as standard SAC
         batch_size = next_obs.shape[0]
         
         with torch.no_grad():
-            # Sample multiple actions for next state
-            next_actions_list = []
-            next_log_probs_list = []
-            
-            for _ in range(cfg.n_action_samples):
-                next_actions, next_log_probs, _ = actor.get_action(next_obs)
-                next_actions_list.append(next_actions)
-                next_log_probs_list.append(next_log_probs)
-            
-            # Stack actions and log probs
-            next_actions_stacked = torch.stack(next_actions_list, dim=1)  # [batch, n_samples, action_dim]
-            next_log_probs_stacked = torch.stack(next_log_probs_list, dim=1)  # [batch, n_samples, 1]
-            
-            # Compute Q-values for all action samples
+            # Sample multiple next-state actions for expectation
             next_obs_expanded = next_obs.unsqueeze(1).expand(-1, cfg.n_action_samples, -1)
             next_obs_flat = next_obs_expanded.reshape(-1, next_obs.shape[-1])
-            next_actions_flat = next_actions_stacked.reshape(-1, next_actions_stacked.shape[-1])
             
+            next_actions_flat, next_log_probs_flat, _ = actor.get_action(next_obs_flat)
             qf1_next_flat = qf1_target(next_obs_flat, next_actions_flat)
             qf2_next_flat = qf2_target(next_obs_flat, next_actions_flat)
             
+            # Reshape to [batch, n_samples]
             qf1_next = qf1_next_flat.reshape(batch_size, cfg.n_action_samples)
             qf2_next = qf2_next_flat.reshape(batch_size, cfg.n_action_samples)
-            next_log_probs_reshaped = next_log_probs_stacked.squeeze(-1)  # [batch, n_samples]
+            next_log_probs = next_log_probs_flat.reshape(batch_size, cfg.n_action_samples)
             
-            # Compute soft values: min(Q1, Q2) - α * log_prob
+            # Compute soft Q-values: min(Q1, Q2) - α * log_prob (standard SAC formula)
             min_qf_next = torch.min(qf1_next, qf2_next)
-            soft_values = min_qf_next - alpha * next_log_probs_reshaped  # [batch, n_samples]
+            soft_q_values = min_qf_next - alpha * next_log_probs  # [batch, n_samples]
             
-            if cfg.mode == "none":
-                # Standard SAC: use mean of soft values
-                next_q_value = rewards.flatten() + (1 - dones.flatten()) * self.discounting_mode.get_effective_gamma() * soft_values.mean(dim=1)
-            
-            elif cfg.mode == "choquet":
-                # Choquet expectation
-                from behavioral.distortions import choquet_expectation
-                choquet_values = []
-                for i in range(batch_size):
-                    choquet_val = choquet_expectation(soft_values[i:i+1], self.g_plus)
-                    choquet_values.append(choquet_val)
-                choquet_values = torch.cat(choquet_values, dim=0)
-                
-                next_q_value = rewards.flatten() + (1 - dones.flatten()) * self.discounting_mode.get_effective_gamma() * choquet_values
-            
+            # Apply behavioral expectation instead of mean
+            if cfg.mode == "choquet":
+                behavioral_expectation = self._compute_choquet_batch(soft_q_values)
             elif cfg.mode == "cpt":
-                # CPT evaluation
-                references = self.reference_provider.get_reference(next_obs)  # [batch]
-                
-                cpt_values = []
-                for i in range(batch_size):
-                    cpt_val = cpt_functional(
-                        soft_values[i:i+1, :],  # [1, n_samples] 
-                        references[i:i+1],      # [1]
-                        self.u_plus,
-                        self.u_minus,
-                        self.g_plus,
-                        self.g_minus,
-                        cfg.lambda_loss_aversion
-                    )
-                    cpt_values.append(cpt_val)
-                cpt_values = torch.cat(cpt_values, dim=0)
-                
-                next_q_value = rewards.flatten() + (1 - dones.flatten()) * self.discounting_mode.get_effective_gamma() * cpt_values
-            
+                references = self.reference_provider.get_reference(next_obs)
+                behavioral_expectation = self._compute_cpt_batch(soft_q_values, references)
             else:
                 raise ValueError(f"Unknown behavioral mode: {cfg.mode}")
-        
+            
+            # Standard SAC target structure with behavioral expectation
+            next_q_value = rewards.flatten() + (1 - dones.flatten()) * 0.99 * behavioral_expectation
+            
         return next_q_value
+    
+    def _compute_choquet_batch(self, values):
+        """Simple Choquet expectation using behavioral package style"""
+        from behavioral.distortions import choquet_expectation
+        
+        # Apply Choquet expectation to each batch item
+        batch_results = []
+        for i in range(values.size(0)):
+            result = choquet_expectation(values[i], self.g_plus)
+            batch_results.append(result)
+        
+        return torch.stack(batch_results)
+    
+    def _compute_cpt_batch(self, values, references):
+        """Simple CPT computation using behavioral package style"""  
+        from behavioral.distortions import cpt_functional
+        
+        # Apply CPT functional to each batch item
+        batch_results = []
+        for i in range(values.size(0)):
+            result = cpt_functional(
+                values[i].unsqueeze(0),  # Add sample dimension 
+                references[i].unsqueeze(0),  # Add batch dimension
+                self.u_plus, 
+                self.u_minus,
+                self.g_plus,
+                self.g_plus,  # Use same distortion for gains and losses
+                lambda_loss_aversion=self.behavioral_config.lambda_loss_aversion
+            )
+            batch_results.append(result.squeeze())
+        
+        return torch.stack(batch_results)
     
     def update_reference_provider(self, episode_return: float):
         """Update reference provider with episode return"""
@@ -497,7 +536,7 @@ if __name__ == "__main__":
                 for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-            if global_step % 1000 == 0:  # Log less frequently for performance
+            if global_step % 100 == 0:  # Log frequently like behavioral_sac.py
                 current_time = time.time()
                 sps = int(global_step / (current_time - start_time))
                 
@@ -533,8 +572,8 @@ if __name__ == "__main__":
                 if args.track:
                     wandb.log(metrics)
                 
-                mean_reward = np.mean(episode_rewards[-10:]) if episode_rewards else 'N/A'
-                print(f"SPS: {sps}, Step: {global_step}, Episodes: {len(episode_rewards)}, Mean Reward (last 10): {mean_reward}")
+                # Print SPS like behavioral_sac.py
+                print("SPS:", int(global_step / (time.time() - start_time)))
 
     # Final logging
     if args.track and episode_rewards:
