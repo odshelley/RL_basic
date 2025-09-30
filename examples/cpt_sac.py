@@ -326,9 +326,14 @@ class CPTSACAgent:
         from behavioral.distortions import choquet_expectation
         
         # Apply Choquet expectation to each batch item
+        # ** CHOQUET INTEGRAL COMPUTATION HAPPENS HERE **
+        # This computes ρ_g(X) = ∫_0^1 F^{-1}(u) d g(u) where:
+        # - values[i] are the samples of random var§iable X (soft Q-values)
+        # - self.g_plus is the probability distortion function g
+        # - choquet_expectation implements the discrete estimator with weights π^(i)=g(C_i)-g(C_{i-1})
         batch_results = []
         for i in range(values.size(0)):
-            result = choquet_expectation(values[i], self.g_plus)
+            result = choquet_expectation(values[i], self.g_plus)  
             batch_results.append(result)
         
         return torch.stack(batch_results)

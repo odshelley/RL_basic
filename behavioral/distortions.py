@@ -6,7 +6,7 @@ Implements probability weighting functions and Choquet integral estimators.
 import torch
 import torch.nn as nn
 import numpy as np
-from typing import Callable, Optional, Dict, Any
+from typing import Dict, Any
 
 
 class DistortionFunction:
