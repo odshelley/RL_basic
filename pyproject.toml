@@ -17,6 +17,7 @@ dependencies = [
     "mujoco>=3.3.6",
     "wandb==0.13.11",
     "colorama==0.4.4",
+    "scipy>=1.15.3",
 ]
 
 [project.optional-dependencies]
