@@ -25,9 +25,15 @@ class CPTValueIteration:
                  env: StochasticGridworld, 
                  theta: float = 1e-6,
                  probability_weighting: Optional[Callable[[float], float]] = None,
-                 alpha: float = 1.0):
+                 alpha: float = 1.0,
+                 # CPT Utility Function Parameters
+                 utility_alpha: float = 0.88,
+                 utility_beta: float = 0.88,
+                 loss_aversion_lambda: float = 2.25,
+                 reference_point: float = 0.0,
+                 use_utility_function: bool = True):
         """
-        Initialize CPT Value Iteration algorithm.
+        Initialize CPT Value Iteration algorithm with full CPT framework.
         
         Args:
             env: The gridworld environment
@@ -35,10 +41,22 @@ class CPTValueIteration:
             probability_weighting: Function g for probability weighting. 
                                  If None, uses Prelec weighting function
             alpha: Learning rate (1.0 for standard VI, < 1.0 for incremental)
+            utility_alpha: Utility curvature parameter for gains (α ≈ 0.88)
+            utility_beta: Utility curvature parameter for losses (β ≈ 0.88) 
+            loss_aversion_lambda: Loss aversion parameter (λ ≈ 2.25)
+            reference_point: Reference point for utility function (usually 0)
+            use_utility_function: If True, uses full CPT; if False, uses only Choquet
         """
         self.env = env
         self.theta = theta
         self.alpha = alpha
+        
+        # CPT Utility Function Parameters (Tversky & Kahneman 1992)
+        self.utility_alpha = utility_alpha  # Gains curvature (α ≈ 0.88)
+        self.utility_beta = utility_beta    # Losses curvature (β ≈ 0.88)
+        self.loss_aversion_lambda = loss_aversion_lambda  # Loss aversion (λ ≈ 2.25)
+        self.reference_point = reference_point  # Reference point (usually 0)
+        self.use_utility_function = use_utility_function
         
         # Set probability weighting function
         if probability_weighting is None:
@@ -111,6 +129,32 @@ class CPTValueIteration:
         
         return choquet_value
     
+    def cpt_utility_function(self, x: float) -> float:
+        """
+        CPT utility function from Tversky & Kahneman (1992).
+        
+        v(x) = { x^α,           x ≥ 0  (gains)
+               { -λ(-x)^β,      x < 0  (losses)
+        
+        Args:
+            x: Outcome value relative to reference point
+            
+        Returns:
+            Utility value
+        """
+        if not self.use_utility_function:
+            return x  # Return raw value if utility function disabled
+        
+        # Compute deviation from reference point
+        deviation = x - self.reference_point
+        
+        if deviation >= 0:
+            # Gains: concave utility (diminishing sensitivity)
+            return deviation ** self.utility_alpha
+        else:
+            # Losses: convex utility + loss aversion (losses loom larger)
+            return -self.loss_aversion_lambda * ((-deviation) ** self.utility_beta)
+    
     def compute_cpt_action_value(self, state: Tuple[int, int], action: Action) -> float:
         """
         Compute CPT Q-value for a specific state-action pair using Choquet integral.
@@ -129,7 +173,7 @@ class CPTValueIteration:
         transitions = self.env.get_transition_probabilities(state, action)
         
         # Prepare outcomes and probabilities for Choquet integral
-        outcomes = []
+        raw_outcomes = []
         probabilities = []
         
         for next_state, prob in transitions.items():
@@ -142,14 +186,17 @@ class CPTValueIteration:
             else:
                 future_value = max(self.Q[next_state].values())
             
-            # Total outcome for this transition
-            outcome = reward + self.env.gamma * future_value
+            # Total raw outcome for this transition
+            raw_outcome = reward + self.env.gamma * future_value
             
-            outcomes.append(outcome)
+            raw_outcomes.append(raw_outcome)
             probabilities.append(prob)
         
-        # Compute Choquet integral over outcomes
-        cpt_value = self.compute_choquet_integral(outcomes, probabilities)
+        # Apply CPT utility function to outcomes
+        utility_outcomes = [self.cpt_utility_function(outcome) for outcome in raw_outcomes]
+        
+        # Compute Choquet integral over utility-transformed outcomes
+        cpt_value = self.compute_choquet_integral(utility_outcomes, probabilities)
         
         return cpt_value
     
@@ -219,6 +266,11 @@ class CPTValueIteration:
             print(f"Discount factor: {self.env.gamma}")
             print(f"Learning rate: {self.alpha}")
             print(f"Probability weighting: {self.g.__name__ if hasattr(self.g, '__name__') else 'Custom'}")
+            if self.use_utility_function:
+                print(f"CPT Utility Function: α={self.utility_alpha}, β={self.utility_beta}, λ={self.loss_aversion_lambda}")
+                print(f"Reference point: {self.reference_point}")
+            else:
+                print("CPT Utility Function: DISABLED (Choquet expectation only)")
             print()
         
         for iteration in range(max_iterations):
@@ -289,3 +341,49 @@ def tversky_kahneman_weighting(gamma: float = 0.61):
 def linear_weighting():
     """Linear (risk-neutral) weighting - recovers standard expectation."""
     return lambda p: p
+
+
+# CPT Utility Function Presets
+def create_standard_cpt_agent(env, **kwargs):
+    """Create CPT agent with standard Tversky & Kahneman (1992) parameters."""
+    return CPTValueIteration(
+        env=env,
+        utility_alpha=0.88,
+        utility_beta=0.88, 
+        loss_aversion_lambda=2.25,
+        reference_point=0.0,
+        use_utility_function=True,
+        **kwargs
+    )
+
+def create_choquet_only_agent(env, **kwargs):
+    """Create agent with only Choquet expectation (no utility function)."""
+    return CPTValueIteration(
+        env=env,
+        use_utility_function=False,
+        **kwargs
+    )
+
+def create_high_loss_aversion_agent(env, **kwargs):
+    """Create CPT agent with high loss aversion (λ=5.0)."""
+    return CPTValueIteration(
+        env=env,
+        utility_alpha=0.88,
+        utility_beta=0.88,
+        loss_aversion_lambda=5.0,
+        reference_point=0.0,
+        use_utility_function=True,
+        **kwargs
+    )
+
+def create_risk_seeking_agent(env, **kwargs):
+    """Create agent with risk-seeking utility (α, β > 1)."""
+    return CPTValueIteration(
+        env=env,
+        utility_alpha=1.2,
+        utility_beta=1.2,
+        loss_aversion_lambda=2.25,
+        reference_point=0.0,
+        use_utility_function=True,
+        **kwargs
+    )

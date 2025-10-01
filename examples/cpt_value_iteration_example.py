@@ -20,7 +20,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 # Import from the local src directory
 from gridworld.environment import StochasticGridworld, Action
 from algorithms.value_iteration import ValueIteration
-from algorithms.cpt_value_iteration import CPTValueIteration, prelec_weighting, tversky_kahneman_weighting
+from algorithms.cpt_value_iteration import (
+    CPTValueIteration, 
+    prelec_weighting, 
+    tversky_kahneman_weighting,
+    create_standard_cpt_agent,
+    create_choquet_only_agent, 
+    create_high_loss_aversion_agent
+)
 from utils.visualization import plot_gridworld, plot_value_function, plot_policy
 
 
@@ -65,41 +72,56 @@ def main():
     standard_results = standard_vi.run(verbose=False)
     print(f"Converged in {standard_results['iterations']} iterations")
     
-    # Run CPT Value Iteration with different weighting functions
-    print("\nRunning CPT Value Iteration (Prelec weighting, γ=0.65)...")
-    cpt_vi_prelec = CPTValueIteration(env, theta=1e-6, probability_weighting=prelec_weighting(0.65))
-    cpt_results_prelec = cpt_vi_prelec.run(verbose=False)
-    print(f"Converged in {cpt_results_prelec['iterations']} iterations")
+    # Run CPT Value Iteration with different configurations
+    print("\nRunning CPT Value Iteration (Choquet only - no utility function)...")
+    cpt_vi_choquet = create_choquet_only_agent(env, theta=1e-6, probability_weighting=prelec_weighting(0.65))
+    cpt_results_choquet = cpt_vi_choquet.run(verbose=False)
+    print(f"Converged in {cpt_results_choquet['iterations']} iterations")
     
-    print("\nRunning CPT Value Iteration (Tversky-Kahneman weighting, γ=0.61)...")
-    cpt_vi_tk = CPTValueIteration(env, theta=1e-6, probability_weighting=tversky_kahneman_weighting(0.61))
-    cpt_results_tk = cpt_vi_tk.run(verbose=False)
-    print(f"Converged in {cpt_results_tk['iterations']} iterations")
+    print("\nRunning Full CPT Value Iteration (Standard TK 1992 parameters)...")
+    cpt_vi_full = create_standard_cpt_agent(env, theta=1e-6, probability_weighting=prelec_weighting(0.65))
+    cpt_results_full = cpt_vi_full.run(verbose=False)
+    print(f"Converged in {cpt_results_full['iterations']} iterations")
+    
+    print("\nRunning High Loss Aversion CPT (λ=5.0)...")
+    cpt_vi_high_la = create_high_loss_aversion_agent(env, theta=1e-6, probability_weighting=prelec_weighting(0.65))
+    cpt_results_high_la = cpt_vi_high_la.run(verbose=False)
+    print(f"Converged in {cpt_results_high_la['iterations']} iterations")
     
     # Compare policies
     print("\n" + "="*40)
     print("POLICY COMPARISON")
     print("="*40)
     
-    # Standard vs Prelec
-    prelec_diffs = compare_policies(standard_results['final_policy'], 
-                                   cpt_results_prelec['final_policy'], env)
-    if prelec_diffs:
-        print(f"\nStandard vs Prelec CPT: {len(prelec_diffs)} policy differences")
-        for diff in prelec_diffs[:5]:  # Show first 5 differences
+    # Standard vs Choquet-only
+    choquet_diffs = compare_policies(standard_results['final_policy'], 
+                                   cpt_results_choquet['final_policy'], env)
+    if choquet_diffs:
+        print(f"\nStandard vs Choquet-only CPT: {len(choquet_diffs)} policy differences")
+        for diff in choquet_diffs[:5]:  # Show first 5 differences
             print(f"  State {diff['state']}: {diff['standard']} → {diff['cpt']}")
     else:
-        print("\nStandard vs Prelec CPT: Identical policies")
+        print("\nStandard vs Choquet-only CPT: Identical policies")
     
-    # Standard vs Tversky-Kahneman
-    tk_diffs = compare_policies(standard_results['final_policy'], 
-                               cpt_results_tk['final_policy'], env)
-    if tk_diffs:
-        print(f"\nStandard vs Tversky-Kahneman CPT: {len(tk_diffs)} policy differences")
-        for diff in tk_diffs[:5]:  # Show first 5 differences
+    # Standard vs Full CPT
+    full_diffs = compare_policies(standard_results['final_policy'], 
+                                 cpt_results_full['final_policy'], env)
+    if full_diffs:
+        print(f"\nStandard vs Full CPT: {len(full_diffs)} policy differences")
+        for diff in full_diffs[:5]:  # Show first 5 differences
             print(f"  State {diff['state']}: {diff['standard']} → {diff['cpt']}")
     else:
-        print("\nStandard vs Tversky-Kahneman CPT: Identical policies")
+        print("\nStandard vs Full CPT: Identical policies")
+    
+    # Standard vs High Loss Aversion
+    high_la_diffs = compare_policies(standard_results['final_policy'], 
+                                   cpt_results_high_la['final_policy'], env)
+    if high_la_diffs:
+        print(f"\nStandard vs High Loss Aversion CPT: {len(high_la_diffs)} policy differences")
+        for diff in high_la_diffs[:5]:  # Show first 5 differences
+            print(f"  State {diff['state']}: {diff['standard']} → {diff['cpt']}")
+    else:
+        print("\nStandard vs High Loss Aversion CPT: Identical policies")
     
     # Evaluate policies
     print("\n" + "="*40)
@@ -115,27 +137,34 @@ def main():
     
     # CPT policies evaluation (using standard environment dynamics)
     # Note: This evaluates the CPT policy in the true environment
-    cpt_vi_prelec.policy = cpt_results_prelec['final_policy']
-    prelec_eval = evaluate_cpt_policy(env, cpt_vi_prelec.policy, 1000)
-    print(f"\nCPT Prelec (γ=0.65):")
-    print(f"  Mean return: {prelec_eval['mean_return']:.3f} ± {prelec_eval['std_return']:.3f}")
-    print(f"  Success rate: {prelec_eval['success_rate']*100:.1f}%")
-    print(f"  Mean episode length: {prelec_eval['mean_length']:.1f}")
+    cpt_vi_choquet.policy = cpt_results_choquet['final_policy']
+    choquet_eval = evaluate_cpt_policy(env, cpt_vi_choquet.policy, 1000)
+    print(f"\nChoquet-only CPT:")
+    print(f"  Mean return: {choquet_eval['mean_return']:.3f} ± {choquet_eval['std_return']:.3f}")
+    print(f"  Success rate: {choquet_eval['success_rate']*100:.1f}%")
+    print(f"  Mean episode length: {choquet_eval['mean_length']:.1f}")
     
-    cpt_vi_tk.policy = cpt_results_tk['final_policy']
-    tk_eval = evaluate_cpt_policy(env, cpt_vi_tk.policy, 1000)
-    print(f"\nCPT Tversky-Kahneman (γ=0.61):")
-    print(f"  Mean return: {tk_eval['mean_return']:.3f} ± {tk_eval['std_return']:.3f}")
-    print(f"  Success rate: {tk_eval['success_rate']*100:.1f}%")
-    print(f"  Mean episode length: {tk_eval['mean_length']:.1f}")
+    cpt_vi_full.policy = cpt_results_full['final_policy']
+    full_eval = evaluate_cpt_policy(env, cpt_vi_full.policy, 1000)
+    print(f"\nFull CPT (TK 1992):")
+    print(f"  Mean return: {full_eval['mean_return']:.3f} ± {full_eval['std_return']:.3f}")
+    print(f"  Success rate: {full_eval['success_rate']*100:.1f}%")
+    print(f"  Mean episode length: {full_eval['mean_length']:.1f}")
+    
+    cpt_vi_high_la.policy = cpt_results_high_la['final_policy']
+    high_la_eval = evaluate_cpt_policy(env, cpt_vi_high_la.policy, 1000)
+    print(f"\nHigh Loss Aversion CPT (λ=5.0):")
+    print(f"  Mean return: {high_la_eval['mean_return']:.3f} ± {high_la_eval['std_return']:.3f}")
+    print(f"  Success rate: {high_la_eval['success_rate']*100:.1f}%")
+    print(f"  Mean episode length: {high_la_eval['mean_length']:.1f}")
     
     # Visualize probability weighting functions
     visualize_weighting_functions()
     
     # Plot value functions
-    plot_value_comparison(env, standard_vi, cpt_vi_prelec, cpt_vi_tk)
+    plot_value_comparison(env, standard_vi, cpt_vi_choquet, cpt_vi_full, cpt_vi_high_la)
     
-    return standard_vi, cpt_vi_prelec, cpt_vi_tk
+    return standard_vi, cpt_vi_choquet, cpt_vi_full, cpt_vi_high_la
 
 
 def evaluate_cpt_policy(env, policy, num_episodes):
@@ -206,29 +235,34 @@ def visualize_weighting_functions():
     plt.show()
 
 
-def plot_value_comparison(env, standard_vi, cpt_prelec, cpt_tk):
+def plot_value_comparison(env, standard_vi, cpt_choquet, cpt_full, cpt_high_la):
     """Plot value functions side by side."""
     # Standard VI
     fig1 = plot_value_function(env, standard_vi.V, 'Standard Value Iteration', figsize=(5, 4))
     
-    # CPT Prelec
-    cpt_v_prelec = {s: cpt_prelec.get_state_value(s) for s in env.get_all_states()}
-    fig2 = plot_value_function(env, cpt_v_prelec, 'CPT Prelec (γ=0.65)', figsize=(5, 4))
+    # CPT Choquet-only
+    cpt_v_choquet = {s: cpt_choquet.get_state_value(s) for s in env.get_all_states()}
+    fig2 = plot_value_function(env, cpt_v_choquet, 'CPT Choquet-only', figsize=(5, 4))
     
-    # CPT Tversky-Kahneman
-    cpt_v_tk = {s: cpt_tk.get_state_value(s) for s in env.get_all_states()}
-    fig3 = plot_value_function(env, cpt_v_tk, 'CPT Tversky-Kahneman (γ=0.61)', figsize=(5, 4))
+    # Full CPT
+    cpt_v_full = {s: cpt_full.get_state_value(s) for s in env.get_all_states()}
+    fig3 = plot_value_function(env, cpt_v_full, 'Full CPT (TK 1992)', figsize=(5, 4))
+    
+    # High Loss Aversion CPT
+    cpt_v_high_la = {s: cpt_high_la.get_state_value(s) for s in env.get_all_states()}
+    fig4 = plot_value_function(env, cpt_v_high_la, 'High Loss Aversion CPT', figsize=(5, 4))
     
     # Save the figures
     fig1.savefig('cpt_standard_vi.png', dpi=150, bbox_inches='tight')
-    fig2.savefig('cpt_prelec_vi.png', dpi=150, bbox_inches='tight')
-    fig3.savefig('cpt_tk_vi.png', dpi=150, bbox_inches='tight')
+    fig2.savefig('cpt_choquet_vi.png', dpi=150, bbox_inches='tight')
+    fig3.savefig('cpt_full_vi.png', dpi=150, bbox_inches='tight')
+    fig4.savefig('cpt_high_la_vi.png', dpi=150, bbox_inches='tight')
     
     plt.show()
 
 
 if __name__ == "__main__":
-    standard_vi, cpt_vi_prelec, cpt_vi_tk = main()
+    results = main()
     
     print("\n" + "="*60)
     print("CPT INTERPRETATION")
