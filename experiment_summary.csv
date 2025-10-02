@@ -1,0 +1,6 @@
+Experiment,Alpha,Eta,Final_Return,Final_Std,Final_Bias
+Extremely Risk-Averse,0.15,0.6,1610.054,1.445,-0.993
+Highly Risk-Averse,0.25,0.7,6167.202,2.543,-2.382
+Inverse S-Curve,0.65,0.4,6006.606,2.395,-0.671
+Risk-Seeking,1.4,1.2,6208.699,2.573,0.052
+Standard SAC,1.0,1.0,6526.36,,
