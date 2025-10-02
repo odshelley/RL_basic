@@ -1,0 +1,32 @@
+{
+  "hyperbolic_performance": {
+    "Choquet + Hyperbolic": 6283.069287109375,
+    "Standard + Hyperbolic": 5221.7671875
+  },
+  "standard_performance": {
+    "Standard SAC": 6694.66669921875,
+    "Risk Averse": 6280.4953125,
+    "Extremely Risk Averse": 1683.4070556640625,
+    "Risk Seeking": 6575.216455078125,
+    "Inverse S-Curve": 6128.196875,
+    "Choquet + Standard": 5386.012939453125
+  },
+  "hyperbolic_mean": 5752.418237304688,
+  "standard_mean": 5457.99922281901,
+  "effect_difference": 294.4190144856775,
+  "effect_percentage": 5.39426633215262,
+  "paired_analysis": {
+    "Choquet": {
+      "hyperbolic": 6283.069287109375,
+      "standard": 5386.012939453125,
+      "improvement": 897.0563476562502,
+      "improvement_pct": 16.655295071521568
+    },
+    "Standard": {
+      "hyperbolic": 5221.7671875,
+      "standard": 6694.66669921875,
+      "improvement": -1472.8995117187505,
+      "improvement_pct": -22.00108799875928
+    }
+  }
+}

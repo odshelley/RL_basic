@@ -1,0 +1,57 @@
+{
+  "common_steps": 99999,
+  "experiments_analyzed": [
+    "Standard SAC",
+    "Risk Averse",
+    "Extremely Risk Averse",
+    "Risk Seeking",
+    "Inverse S-Curve",
+    "Choquet + Hyperbolic",
+    "Choquet + Standard",
+    "Standard + Hyperbolic"
+  ],
+  "hyperbolic_analysis": {
+    "hyperbolic_experiments": [
+      "Choquet + Hyperbolic",
+      "Standard + Hyperbolic"
+    ],
+    "standard_experiments": [
+      "Standard SAC",
+      "Risk Averse",
+      "Extremely Risk Averse",
+      "Risk Seeking",
+      "Inverse S-Curve",
+      "Choquet + Standard"
+    ],
+    "performance_comparison": {
+      "Standard SAC": 6694.66669921875,
+      "Risk Averse": 6280.4953125,
+      "Extremely Risk Averse": 1683.4070556640625,
+      "Risk Seeking": 6575.216455078125,
+      "Inverse S-Curve": 6128.196875,
+      "Choquet + Hyperbolic": 6283.069287109375,
+      "Choquet + Standard": 5386.012939453125,
+      "Standard + Hyperbolic": 5221.7671875
+    },
+    "variance_comparison": {}
+  },
+  "variance_data_available": [
+    "Standard SAC",
+    "Risk Averse",
+    "Extremely Risk Averse",
+    "Risk Seeking",
+    "Inverse S-Curve",
+    "Choquet + Hyperbolic",
+    "Choquet + Standard",
+    "Standard + Hyperbolic"
+  ],
+  "bias_data_available": [
+    "Risk Averse",
+    "Extremely Risk Averse",
+    "Risk Seeking",
+    "Inverse S-Curve",
+    "Choquet + Hyperbolic",
+    "Choquet + Standard",
+    "Standard + Hyperbolic"
+  ]
+}

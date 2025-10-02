@@ -1,0 +1,78 @@
+{
+  "parameter_data": {
+    "Standard SAC": {
+      "alpha": 1.0,
+      "eta": 1.0,
+      "gamma": 0.99,
+      "hyperbolic": false,
+      "choquet": false,
+      "distortion_bias": null
+    },
+    "Risk Averse": {
+      "alpha": 0.5,
+      "eta": 1.0,
+      "gamma": 0.99,
+      "hyperbolic": false,
+      "choquet": true,
+      "distortion_bias": -2.5883338928222654
+    },
+    "Extremely Risk Averse": {
+      "alpha": 0.3,
+      "eta": 1.5,
+      "gamma": 0.99,
+      "hyperbolic": false,
+      "choquet": true,
+      "distortion_bias": -1.0349172592163085
+    },
+    "Risk Seeking": {
+      "alpha": 1.0,
+      "eta": 0.5,
+      "gamma": 0.99,
+      "hyperbolic": false,
+      "choquet": true,
+      "distortion_bias": 0.0541259765625
+    },
+    "Inverse S-Curve": {
+      "alpha": 8.720396041870117,
+      "eta": 0.4000000059604645,
+      "gamma": 0.99,
+      "hyperbolic": false,
+      "choquet": true,
+      "distortion_bias": -0.7225143432617187
+    },
+    "Choquet + Hyperbolic": {
+      "alpha": 8.727238655090332,
+      "eta": 0.4000000059604645,
+      "gamma": 0.968999981880188,
+      "hyperbolic": true,
+      "choquet": true,
+      "distortion_bias": -0.51507568359375
+    },
+    "Choquet + Standard": {
+      "alpha": 8.729656219482422,
+      "eta": 0.4000000059604645,
+      "gamma": 0.99,
+      "hyperbolic": false,
+      "choquet": true,
+      "distortion_bias": -0.711846923828125
+    },
+    "Standard + Hyperbolic": {
+      "alpha": 1.0,
+      "eta": 0.5,
+      "gamma": 0.968999981880188,
+      "hyperbolic": true,
+      "choquet": false,
+      "distortion_bias": 0.0
+    }
+  },
+  "new_names": {
+    "Standard SAC": "SAC + Standard(\u03b3=0.99)",
+    "Risk Averse": "SAC + Prelec(\u03b1=0.5,\u03b7=1.0) + Standard(\u03b3=0.99)",
+    "Extremely Risk Averse": "SAC + Prelec(\u03b1=0.3,\u03b7=1.5) + Standard(\u03b3=0.99)",
+    "Risk Seeking": "SAC + Prelec(\u03b1=1.0,\u03b7=0.5) + Standard(\u03b3=0.99)",
+    "Inverse S-Curve": "SAC + Prelec(\u03b1=8.7,\u03b7=0.4) + Standard(\u03b3=0.99)",
+    "Choquet + Hyperbolic": "SAC + Prelec(\u03b1=8.7,\u03b7=0.4) + Hyperbolic(\u03b3_eff=0.969)",
+    "Choquet + Standard": "SAC + Prelec(\u03b1=8.7,\u03b7=0.4) + Standard(\u03b3=0.99)",
+    "Standard + Hyperbolic": "SAC + Hyperbolic(\u03b3_eff=0.969)"
+  }
+}
